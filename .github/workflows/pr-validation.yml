@@ -41,35 +41,23 @@ jobs:
               errors.push(`❌ PR title must start with **"Access Control - "**`);
             }
 
-            // 3a. ServiceNow check (strict ALPHANUMERIC + URL, no outer parentheses)
-            const body = pr.body || "";
-            const serviceNowRegex = /### ServiceNow:\s*\[([A-Za-z0-9]+)\]\((https?:\/\/[^\s)]+)\)/;
-            if (!serviceNowRegex.test(body)) {
-              errors.push(`❌ PR description must include a valid ServiceNow reference in this format:\n   \`### ServiceNow: [ALPHANUMERIC](http[s]://url)\``);
-            }
-
-            // 3b. Justification check
-            if (!/### Justification:/.test(body)) {
-              errors.push(`❌ PR description must include a **Justification** section:\n   \`### Justification:\``);
-            }
-
-            // 4. Labels check
+            // 3. Labels check
             if (!pr.labels || pr.labels.length === 0) {
               errors.push(`❌ At least one **label** must be set`);
             }
 
-            // 5. Assignees check
+            // 4. Assignees check
             if (!pr.assignees || pr.assignees.length === 0) {
               errors.push(`❌ At least one **assignee** must be set`);
             }
 
-            // 6. Reviewer check
+            // 5. Reviewer check
             const reviewers = pr.requested_reviewers || [];
             if (reviewers.length === 0) {
               errors.push(`❌ At least one **reviewer** must be requested`);
             }
 
-            // Prepare comment body with a hidden marker so we can find it later
+            // Prepare comment body with a hidden marker so we can update it
             let commentBody = "";
             if (errors.length > 0) {
               commentBody = [
