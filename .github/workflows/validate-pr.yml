@@ -45,28 +45,36 @@ jobs:
               errors.push('❌ **Assignee** is not set. Please set it once the PR is ready for review.');
             }
 
-            // 5. Comment format check
+            // 5. Comment format check (split into two validations)
             const comments = await github.rest.issues.listComments({
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: pr.number
             });
 
-            const hasValidComment = comments.data.some(comment => {
-              return (
-                comment.body.includes('### ServiceNow: [') &&
-                comment.body.includes('](http') &&
-                comment.body.includes('### Justification:')
-              );
+            let hasServiceNow = false;
+            let hasJustification = false;
+
+            comments.data.forEach(comment => {
+              if (comment.body.includes('### ServiceNow: [') && comment.body.includes('](http')) {
+                hasServiceNow = true;
+              }
+              if (comment.body.includes('### Justification:')) {
+                hasJustification = true;
+              }
             });
 
-            if (!hasValidComment) {
-              errors.push('❌ **Comment** must include:\n- `### ServiceNow: [link]`\n- `### Justification:` \nfollowed by explanation');
+            if (!hasServiceNow) {
+              errors.push('❌ **Comment** must include `### ServiceNow: [link]` on the same line');
+            }
+            if (!hasJustification) {
+              errors.push('❌ **Comment** must include `### Justification:` followed by explanation');
             }
 
             // 6. Post result
             const previousComment = comments.data.find(comment =>
-              comment.body.includes('### 🚨 Pull Request Validation Failed')
+              comment.body.includes('### 🚨 Pull Request Validation Failed') ||
+              comment.body.includes('✅ All validation checks passed')
             );
 
             if (errors.length > 0) {
