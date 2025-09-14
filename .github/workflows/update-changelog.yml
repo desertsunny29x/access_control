@@ -38,28 +38,57 @@ jobs:
             echo "" >> CHANGELOG.md
           fi
 
-          # ✅ Emoji removed
           NEW_ENTRY="- **${PR_TITLE}** (PR [#${PR_NUMBER}](https://github.com/${{ github.repository }}/pull/${PR_NUMBER})) by @${PR_AUTHOR}"
 
-          # Check if today's section exists
+          # If today's section exists, insert entry, then re-sort by PR number
           if grep -q "## ${DATE}" CHANGELOG.md; then
-            # Append under today's section
-            awk -v date="## ${DATE}" -v entry="$NEW_ENTRY" '
+            awk -v date="## ${DATE}" -v entry="$NEW_ENTRY" -v prnum="$PR_NUMBER" '
+              BEGIN { inserted=0 }
               {
                 print $0
                 if ($0 == date) {
-                  found=1
-                } else if (found && $0 !~ /^-/) {
                   print entry
-                  found=0
+                  inserted=1
                 }
               }
               END {
-                if (found) print entry
+                if (!inserted) {
+                  print date
+                  print entry
+                }
               }
-            ' CHANGELOG.md > CHANGELOG.tmp && mv CHANGELOG.tmp CHANGELOG.md
+            ' CHANGELOG.md > CHANGELOG.tmp
+
+            # Extract the section for today, sort its entries by PR number, and rebuild the file
+            awk -v date="## ${DATE}" '
+              BEGIN {in_section=0}
+              /^## / {
+                if (in_section && $0 != date) {
+                  in_section=0
+                }
+              }
+              {
+                if ($0 == date) {
+                  in_section=1
+                }
+                if (in_section) {
+                  print > "section.tmp"
+                } else {
+                  print > "rest.tmp"
+                }
+              }
+            ' CHANGELOG.tmp
+
+            # Sort section lines that are PR entries by PR number
+            head -n 1 section.tmp > sorted_section.tmp
+            grep "^- \*\*" section.tmp | sort -t# -k2,2n >> sorted_section.tmp
+            grep -v "^- \*\*" section.tmp | tail -n +2 >> sorted_section.tmp
+
+            # Recombine
+            cat sorted_section.tmp rest.tmp > CHANGELOG.md
+            rm -f section.tmp rest.tmp sorted_section.tmp CHANGELOG.tmp
           else
-            # Add new section for today
+            # Prepend new section for today
             {
               echo "## ${DATE}"
               echo "${NEW_ENTRY}"
