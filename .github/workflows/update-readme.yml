@@ -75,6 +75,9 @@ jobs:
           lines = []
           lines.append("# Access Control DBT Project")
           lines.append("")
+          # ✅ Add PR Validation status badge
+          lines.append("[![PR Validation](https://github.com/desertsunny29x/access_control/actions/workflows/pr-validation.yml/badge.svg)](https://github.com/desertsunny29x/access_control/actions/workflows/pr-validation.yml)")
+          lines.append("")
           lines.append("This repository contains a dbt project focused on **Access Control**. It provides reusable macros and models to manage, validate, and enforce access control logic within your data platform.")
           lines.append("")
           lines.append("## Macros")
@@ -90,7 +93,6 @@ jobs:
           lines.append("## Latest Build & Changes")
           lines.append(f"- 📅 Last updated: **{today}**")
           lines.append(f"- 📝 Latest merged PR: **{pr_title}** (PR [#{pr_num}](https://github.com/{repo}/pull/{pr_num})) by @{pr_author}")
-          lines.append("- ✅ CI/CD ensures PRs are validated before merging (branch name, title, justification, labels, assignees, reviewers).")
           lines.append("- 📖 `CHANGELOG.md` is auto-updated whenever a PR is merged, keeping track of changes per day.")
           lines.append("- 🛠️ dbt macros here are designed to be reusable and efficient, reducing boilerplate in your models.")
           lines.append("")
@@ -102,7 +104,6 @@ jobs:
 
           new_content = "\n".join(lines)
 
-          # Write README.md if content changed
           if not readme_path.exists() or readme_path.read_text(encoding="utf-8") != new_content:
               readme_path.write_text(new_content, encoding="utf-8")
               print("README.md updated")
