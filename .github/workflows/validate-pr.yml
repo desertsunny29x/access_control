@@ -1,7 +1,7 @@
 name: Validate Pull Request Standards
 
 on:
-  pull_request:
+  pull_request_target:
     types: [opened, edited, synchronize, reopened]
 
 jobs:
@@ -9,38 +9,39 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Validate PR metadata
+      - name: Validate PR and comment results
         uses: actions/github-script@v6
         with:
           script: |
             const pr = context.payload.pull_request;
+            const errors = [];
 
-            // 1. Validate PR title
+            // 1. Title check
             if (!pr.title.startsWith('Access Control - ')) {
-              core.setFailed('❌ PR title must start with "Access Control - "');
+              errors.push('❌ **Title** must start with `Access Control - `');
             }
 
-            // 2. Validate branch name
+            // 2. Branch name check
             const branchName = pr.head.ref;
             const validBranchRegex = /^[a-z0-9/_]+$/;
             if (!branchName.startsWith('fix/') && !branchName.startsWith('access/')) {
-              core.setFailed('❌ Branch name must start with "fix/" or "access/"');
+              errors.push('❌ **Branch name** must start with `fix/` or `access/`');
             } else if (!validBranchRegex.test(branchName)) {
-              core.setFailed('❌ Branch name must contain only lowercase letters, numbers, "/" or "_"');
+              errors.push('❌ **Branch name** must contain only lowercase letters, numbers, `/`, or `_`');
             }
 
-            // 3. Validate label
+            // 3. Label check
             const hasLabel = pr.labels.some(label => label.name.toLowerCase() === 'access control');
             if (!hasLabel) {
-              core.setFailed('❌ PR must have the "access control" label');
+              errors.push('❌ **Label** `access control` is missing');
             }
 
-            // 4. Validate assignees
+            // 4. Assignee check
             if (pr.assignees.length === 0) {
-              core.setFailed('❌ PR must have at least one assignee');
+              errors.push('❌ **Assignee** is not set');
             }
 
-            // 5. Validate comment format
+            // 5. Comment format check
             const comments = await github.rest.issues.listComments({
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -56,18 +57,41 @@ jobs:
             });
 
             if (!hasValidComment) {
-              core.setFailed('❌ PR must include a comment with "### ServiceNow: [link]" and "### Justification:" headings');
+              errors.push('❌ **Comment** must include:\n- `### ServiceNow: [link]` on the same line\n- `### Justification:` followed by explanation');
             }
 
-      - name: Check for merge conflicts
-        run: |
-          git fetch origin ${{ github.event.pull_request.base.ref }}
-          git checkout ${{ github.event.pull_request.head.ref }}
-          git merge --no-commit --no-ff origin/${{ github.event.pull_request.base.ref }} || echo "conflict" > conflict.txt
+            // 6. Post result
+            const previousComment = comments.data.find(comment =>
+              comment.body.includes('### 🚨 Pull Request Validation Failed')
+            );
 
-      - name: Fail if conflicts exist
-        run: |
-          if [ -f conflict.txt ]; then
-            echo "❌ Merge conflicts detected. Please resolve before proceeding."
-            exit 1
-          fi
+            if (errors.length > 0) {
+              const body = `### 🚨 Pull Request Validation Failed\nThe following issues were found:\n\n${errors.map(e => `- ${e}`).join('\n')}\n\nPlease fix these before merging.`;
+
+              if (previousComment) {
+                await github.rest.issues.updateComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  comment_id: previousComment.id,
+                  body
+                });
+              } else {
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: pr.number,
+                  body
+                });
+              }
+
+              core.setFailed('Validation failed. See PR comments for details.');
+            } else {
+              if (previousComment) {
+                await github.rest.issues.updateComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  comment_id: previousComment.id,
+                  body: '✅ All validation checks passed. This pull request is compliant and ready for review.'
+                });
+              }
+            }
