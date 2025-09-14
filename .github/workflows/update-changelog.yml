@@ -33,38 +33,29 @@ jobs:
           BRANCH=${{ github.event.pull_request.head.ref }}
           DATE=$(date -u +"%Y-%m-%d")
 
-          # Create header if file doesn’t exist
+          # Initialize changelog if it doesn't exist
           if [ ! -f CHANGELOG.md ]; then
             echo "# Changelog" > CHANGELOG.md
             echo "" >> CHANGELOG.md
           fi
 
-          # Prepare new entry
           NEW_ENTRY="- 🎉 **${PR_TITLE}** (#${PR_NUMBER}) by @${PR_AUTHOR} [branch: \`${BRANCH}\`]"
 
-          # Check if today's section already exists
+          # If today's date section exists, append entry under it
           if grep -q "## ${DATE}" CHANGELOG.md; then
-            # Append the new entry under today's section
+            # Insert NEW_ENTRY right after the date header line
             awk -v date="## ${DATE}" -v entry="$NEW_ENTRY" '
-              BEGIN{printed=0}
               {
                 print $0
-                if($0 == date && !printed){
-                  getline
-                  if($0 == ""){
-                    print ""
-                  } else {
-                    print $0
-                  }
+                if ($0 == date) {
                   print entry
-                  printed=1
                 }
-              }' CHANGELOG.md > CHANGELOG.tmp && mv CHANGELOG.tmp CHANGELOG.md
+              }
+            ' CHANGELOG.md > CHANGELOG.tmp && mv CHANGELOG.tmp CHANGELOG.md
           else
-            # Insert a new date section at the top
+            # Prepend new section with today's date and entry after header
             awk -v date="## ${DATE}" -v entry="$NEW_ENTRY" '
-              NR==2{
-                print ""
+              NR==2 {
                 print date
                 print entry
                 print ""
