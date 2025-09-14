@@ -42,7 +42,7 @@ jobs:
 
             // 4. Assignee check
             if (pr.assignees.length === 0) {
-              errors.push('❌ **Assignee** is not set');
+              errors.push('❌ **Assignee** is not set. Please set it once the PR is ready for review.');
             }
 
             // 5. Comment format check
@@ -61,7 +61,7 @@ jobs:
             });
 
             if (!hasValidComment) {
-              errors.push('❌ **Comment** must include:\n- `### ServiceNow: [link]` on the same line\n- `### Justification:` followed by explanation');
+              errors.push('❌ **Comment** must include:\n- `### ServiceNow: [link]`\n- `### Justification:` \nfollowed by explanation');
             }
 
             // 6. Post result
