@@ -38,13 +38,12 @@ jobs:
             echo "" >> CHANGELOG.md
           fi
 
-          NEW_ENTRY="- 🎉 **${PR_TITLE}** (PR [#${PR_NUMBER}](https://github.com/${{ github.repository }}/pull/${PR_NUMBER})) by @${PR_AUTHOR}"
+          # ✅ Emoji removed
+          NEW_ENTRY="- **${PR_TITLE}** (PR [#${PR_NUMBER}](https://github.com/${{ github.repository }}/pull/${PR_NUMBER})) by @${PR_AUTHOR}"
 
-          # Read file into variable
-          CONTENT="$(cat CHANGELOG.md)"
-
-          if echo "$CONTENT" | grep -q "## ${DATE}"; then
-            # Append entry under the existing date section
+          # Check if today's section exists
+          if grep -q "## ${DATE}" CHANGELOG.md; then
+            # Append under today's section
             awk -v date="## ${DATE}" -v entry="$NEW_ENTRY" '
               {
                 print $0
@@ -60,7 +59,7 @@ jobs:
               }
             ' CHANGELOG.md > CHANGELOG.tmp && mv CHANGELOG.tmp CHANGELOG.md
           else
-            # Prepend new section for today
+            # Add new section for today
             {
               echo "## ${DATE}"
               echo "${NEW_ENTRY}"
