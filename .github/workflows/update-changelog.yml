@@ -33,35 +33,41 @@ jobs:
           BRANCH=${{ github.event.pull_request.head.ref }}
           DATE=$(date -u +"%Y-%m-%d")
 
-          # Initialize changelog if it doesn't exist
+          # Initialize file if missing
           if [ ! -f CHANGELOG.md ]; then
             echo "# Changelog" > CHANGELOG.md
             echo "" >> CHANGELOG.md
           fi
 
-          NEW_ENTRY="- 🎉 **${PR_TITLE}** (#${PR_NUMBER}) by @${PR_AUTHOR} [branch: \`${BRANCH}\`]"
+          NEW_ENTRY="- 🎉 **${PR_TITLE}** (PR [#${PR_NUMBER}](https://github.com/${{ github.repository }}/pull/${PR_NUMBER})) by @${PR_AUTHOR} [branch: \`${BRANCH}\`]"
 
-          # If today's date section exists, append entry under it
-          if grep -q "## ${DATE}" CHANGELOG.md; then
-            # Insert NEW_ENTRY right after the date header line
+          # Read file into variable
+          CONTENT="$(cat CHANGELOG.md)"
+
+          if echo "$CONTENT" | grep -q "## ${DATE}"; then
+            # Append entry under the existing date section
             awk -v date="## ${DATE}" -v entry="$NEW_ENTRY" '
               {
                 print $0
                 if ($0 == date) {
+                  found=1
+                } else if (found && $0 !~ /^-/) {
                   print entry
+                  found=0
                 }
+              }
+              END {
+                if (found) print entry
               }
             ' CHANGELOG.md > CHANGELOG.tmp && mv CHANGELOG.tmp CHANGELOG.md
           else
-            # Prepend new section with today's date and entry after header
-            awk -v date="## ${DATE}" -v entry="$NEW_ENTRY" '
-              NR==2 {
-                print date
-                print entry
-                print ""
-              }
-              {print}
-            ' CHANGELOG.md > CHANGELOG.tmp && mv CHANGELOG.tmp CHANGELOG.md
+            # Prepend new section for today
+            {
+              echo "## ${DATE}"
+              echo "${NEW_ENTRY}"
+              echo ""
+              cat CHANGELOG.md
+            } > CHANGELOG.tmp && mv CHANGELOG.tmp CHANGELOG.md
           fi
 
       - name: Commit and push changes
