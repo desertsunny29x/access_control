@@ -1,0 +1,80 @@
+name: Update Changelog
+
+on:
+  pull_request:
+    types:
+      - closed
+
+permissions:
+  contents: write
+  pull-requests: read
+
+jobs:
+  update-changelog:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Git
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Update CHANGELOG.md
+        run: |
+          PR_TITLE="${{ github.event.pull_request.title }}"
+          PR_NUMBER=${{ github.event.pull_request.number }}
+          PR_AUTHOR=${{ github.event.pull_request.user.login }}
+          BRANCH=${{ github.event.pull_request.head.ref }}
+          DATE=$(date -u +"%Y-%m-%d")
+
+          # Create header if file doesn’t exist
+          if [ ! -f CHANGELOG.md ]; then
+            echo "# Changelog" > CHANGELOG.md
+            echo "" >> CHANGELOG.md
+          fi
+
+          # Prepare new entry
+          NEW_ENTRY="- 🎉 **${PR_TITLE}** (#${PR_NUMBER}) by @${PR_AUTHOR} [branch: \`${BRANCH}\`]"
+
+          # Check if today's section already exists
+          if grep -q "## ${DATE}" CHANGELOG.md; then
+            # Append the new entry under today's section
+            awk -v date="## ${DATE}" -v entry="$NEW_ENTRY" '
+              BEGIN{printed=0}
+              {
+                print $0
+                if($0 == date && !printed){
+                  getline
+                  if($0 == ""){
+                    print ""
+                  } else {
+                    print $0
+                  }
+                  print entry
+                  printed=1
+                }
+              }' CHANGELOG.md > CHANGELOG.tmp && mv CHANGELOG.tmp CHANGELOG.md
+          else
+            # Insert a new date section at the top
+            awk -v date="## ${DATE}" -v entry="$NEW_ENTRY" '
+              NR==2{
+                print ""
+                print date
+                print entry
+                print ""
+              }
+              {print}
+            ' CHANGELOG.md > CHANGELOG.tmp && mv CHANGELOG.tmp CHANGELOG.md
+          fi
+
+      - name: Commit and push changes
+        run: |
+          git add CHANGELOG.md
+          git commit -m "docs: update changelog for PR #${{ github.event.pull_request.number }}"
+          git push origin HEAD:${{ github.ref_name }}
