@@ -21,16 +21,17 @@ jobs:
               errors.push(`❌ Branch name \`${branch}\` must start with \`fix/\` or \`access/\` and contain only lowercase letters, numbers, /, or _`);
             }
 
-            // 2. Title check
-            if (!pr.title.startsWith("Access Control - ")) {
+            // 2. Title check (explicit)
+            if (!/^Access Control - .+/.test(pr.title)) {
               errors.push(`❌ PR title must start with **"Access Control - "**`);
             }
 
             // 3. ServiceNow check
             const body = pr.body || "";
-            const hasServiceNow = /### ServiceNow:\s*\(\[#\w+\]\(http.*\)\)/.test(body);
-            if (!hasServiceNow) {
-              errors.push(`❌ PR description must include a ServiceNow reference in format:\n   \`### ServiceNow: ([#RequestNumber](URL))\``);
+            const serviceNowRegex = /### ServiceNow:\s*\(\[([A-Za-z0-9]+)\]\((https?:\/\/[^\s)]+)\)\)/;
+            const match = body.match(serviceNowRegex);
+            if (!match) {
+              errors.push(`❌ PR description must include a valid ServiceNow reference in this format:\n   \`### ServiceNow: ([ALPHANUMERIC](http[s]://url))\``);
             }
 
             // 4. Justification check
