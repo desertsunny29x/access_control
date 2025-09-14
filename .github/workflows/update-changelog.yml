@@ -9,15 +9,21 @@ permissions:
   contents: write
   pull-requests: read
 
+concurrency:
+  group: update-changelog-${{ github.event.pull_request.base.ref }}
+  cancel-in-progress: false
+
 jobs:
   update-changelog:
     if: github.event.pull_request.merged == true
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
+      - name: Checkout target branch (PR base)
         uses: actions/checkout@v4
         with:
+          # checkout the base branch (where the PR was merged into)
+          ref: ${{ github.event.pull_request.base.ref }}
           fetch-depth: 0
 
       - name: Set up Git
@@ -25,80 +31,111 @@ jobs:
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
 
-      - name: Update CHANGELOG.md
+      - name: Update CHANGELOG.md (safe, sorted by PR number)
+        env:
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
         run: |
-          PR_TITLE="${{ github.event.pull_request.title }}"
-          PR_NUMBER=${{ github.event.pull_request.number }}
-          PR_AUTHOR=${{ github.event.pull_request.user.login }}
-          DATE=$(date -u +"%Y-%m-%d")
+          python - <<'PY'
+          import os, datetime, re
 
-          # Initialize file if missing
-          if [ ! -f CHANGELOG.md ]; then
-            echo "# Changelog" > CHANGELOG.md
-            echo "" >> CHANGELOG.md
-          fi
+          repo = os.environ['GITHUB_REPOSITORY']
+          pr_num = os.environ['PR_NUMBER']
+          pr_title = os.environ['PR_TITLE']
+          pr_author = os.environ['PR_AUTHOR']
+          today = datetime.datetime.utcnow().strftime('%Y-%m-%d')
 
-          NEW_ENTRY="- **${PR_TITLE}** (PR [#${PR_NUMBER}](https://github.com/${{ github.repository }}/pull/${PR_NUMBER})) by @${PR_AUTHOR}"
+          entry = f"- **{pr_title}** (PR [#{pr_num}](https://github.com/{repo}/pull/{pr_num})) by @{pr_author}"
 
-          # If today's section exists, insert entry, then re-sort by PR number
-          if grep -q "## ${DATE}" CHANGELOG.md; then
-            awk -v date="## ${DATE}" -v entry="$NEW_ENTRY" -v prnum="$PR_NUMBER" '
-              BEGIN { inserted=0 }
-              {
-                print $0
-                if ($0 == date) {
-                  print entry
-                  inserted=1
-                }
-              }
-              END {
-                if (!inserted) {
-                  print date
-                  print entry
-                }
-              }
-            ' CHANGELOG.md > CHANGELOG.tmp
+          fname = 'CHANGELOG.md'
 
-            # Extract the section for today, sort its entries by PR number, and rebuild the file
-            awk -v date="## ${DATE}" '
-              BEGIN {in_section=0}
-              /^## / {
-                if (in_section && $0 != date) {
-                  in_section=0
-                }
-              }
-              {
-                if ($0 == date) {
-                  in_section=1
-                }
-                if (in_section) {
-                  print > "section.tmp"
-                } else {
-                  print > "rest.tmp"
-                }
-              }
-            ' CHANGELOG.tmp
+          # Ensure file exists with header
+          if not os.path.exists(fname):
+              with open(fname, 'w', encoding='utf-8') as fh:
+                  fh.write('# Changelog\n\n')
 
-            # Sort section lines that are PR entries by PR number
-            head -n 1 section.tmp > sorted_section.tmp
-            grep "^- \*\*" section.tmp | sort -t# -k2,2n >> sorted_section.tmp
-            grep -v "^- \*\*" section.tmp | tail -n +2 >> sorted_section.tmp
+          with open(fname, 'r', encoding='utf-8') as fh:
+              lines = fh.read().splitlines()
 
-            # Recombine
-            cat sorted_section.tmp rest.tmp > CHANGELOG.md
-            rm -f section.tmp rest.tmp sorted_section.tmp CHANGELOG.tmp
+          # collect header lines (everything before first "## ")
+          header = []
+          i = 0
+          while i < len(lines) and not lines[i].startswith('## '):
+              header.append(lines[i])
+              i += 1
+          if not header:
+              header = ['# Changelog', '']
+
+          # parse date sections: list of (date_str, [entries])
+          sections = []
+          while i < len(lines):
+              if lines[i].startswith('## '):
+                  date_hdr = lines[i][3:].strip()
+                  i += 1
+                  entries = []
+                  # collect following lines until next '## ' or EOF
+                  while i < len(lines) and not lines[i].startswith('## '):
+                      if lines[i].strip().startswith('- '):
+                          entries.append(lines[i].rstrip())
+                      i += 1
+                  sections.append((date_hdr, entries))
+              else:
+                  # skip unexpected lines
+                  i += 1
+
+          # function to extract PR number from an entry line
+          def pr_number_from_entry(e):
+              m = re.search(r'#(\d+)', e)
+              return int(m.group(1)) if m else 10**9
+
+          # add entry into today's section (create if missing)
+          found = False
+          for idx, (d, entries) in enumerate(sections):
+              if d == today:
+                  if entry not in entries:
+                      entries.append(entry)
+                  # sort entries by PR number ascending
+                  entries.sort(key=pr_number_from_entry)
+                  sections[idx] = (d, entries)
+                  found = True
+                  break
+
+          if not found:
+              # insert today's section at the top (newest first)
+              sections.insert(0, (today, [entry]))
+
+          # rebuild file content
+          out_lines = []
+          out_lines.extend(header)
+          if out_lines and out_lines[-1].strip() != '':
+              out_lines.append('')
+
+          for d, entries in sections:
+              out_lines.append(f'## {d}')
+              for e in entries:
+                  out_lines.append(e)
+              out_lines.append('')
+
+          new_content = '\n'.join(out_lines).rstrip() + '\n'
+          old_content = '\n'.join(lines).rstrip() + '\n' if lines else ''
+
+          if new_content != old_content:
+              with open(fname, 'w', encoding='utf-8') as fh:
+                  fh.write(new_content)
+              print('CHANGELOG updated')
+              # exit 0 -> changes made
+          else:
+              print('No changes needed in CHANGELOG')
+          PY
+
+      - name: Commit & push changelog (if changed)
+        run: |
+          git add CHANGELOG.md || true
+          if git diff --cached --quiet; then
+            echo "No changelog changes to commit"
           else
-            # Prepend new section for today
-            {
-              echo "## ${DATE}"
-              echo "${NEW_ENTRY}"
-              echo ""
-              cat CHANGELOG.md
-            } > CHANGELOG.tmp && mv CHANGELOG.tmp CHANGELOG.md
+            git commit -m "docs: update changelog for PR #${{ github.event.pull_request.number }}"
+            git push origin HEAD
           fi
-
-      - name: Commit and push changes
-        run: |
-          git add CHANGELOG.md
-          git commit -m "docs: update changelog for PR #${{ github.event.pull_request.number }}"
-          git push origin HEAD:${{ github.ref_name }}
