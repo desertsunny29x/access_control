@@ -41,17 +41,23 @@ jobs:
               errors.push(`❌ PR title must start with **"Access Control - "**`);
             }
 
-            // 3. Labels check
+            // 3. Justification check
+            const body = pr.body || "";
+            if (!/### Justification:/.test(body)) {
+              errors.push(`❌ PR description must include a **Justification** section:\n   \`### Justification:\``);
+            }
+
+            // 4. Labels check
             if (!pr.labels || pr.labels.length === 0) {
               errors.push(`❌ At least one **label** must be set`);
             }
 
-            // 4. Assignees check
+            // 5. Assignees check
             if (!pr.assignees || pr.assignees.length === 0) {
               errors.push(`❌ At least one **assignee** must be set`);
             }
 
-            // 5. Reviewer check
+            // 6. Reviewer check
             const reviewers = pr.requested_reviewers || [];
             if (reviewers.length === 0) {
               errors.push(`❌ At least one **reviewer** must be requested`);
