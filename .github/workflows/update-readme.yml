@@ -1,8 +1,13 @@
-name: Update README with PR Info
+name: Update README
 
 on:
   pull_request:
-    types: [closed]
+    types:
+      - closed
+
+permissions:
+  contents: write
+  pull-requests: read
 
 jobs:
   update-readme:
@@ -10,47 +15,107 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v3
+      - name: Checkout target branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.ref }}
+          fetch-depth: 0
 
-      - name: Extract PR details
+      - name: Set up Git
         run: |
-          echo "- [#${{ github.event.pull_request.number }}](${{ github.event.pull_request.html_url }}) — **${{ github.event.pull_request.title }}** by @${{ github.event.pull_request.user.login }} on $(date +'%Y-%m-%d')" >> pr_entry.md
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
 
-      - name: Insert PR entry into README
+      - name: Update README.md
+        env:
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
         run: |
-          # Insert PR entry under "Recent Pull Requests" section
-          awk '/## 📦 Recent Pull Requests/{print; system("cat pr_entry.md"); next}1' README.md > temp.md
-          mv temp.md README.md
+          python - <<'PY'
+          import os, re, datetime, pathlib
 
-      - name: Ensure top section is present
-        run: |
-          echo "# JetBlue dbt Access Control" > top.md
-          echo "" >> top.md
-          echo "✈️ **Purpose**" >> top.md
-          echo "This repository manages access control within JetBlue's dbt environment. It defines and applies role-based permissions across various schemas and environments, ensuring secure and auditable data access." >> top.md
-          echo "" >> top.md
-          echo "## 🧩 Macro Descriptions" >> top.md
-          echo "| Macro File | Description |" >> top.md
-          echo "|------------|-------------|" >> top.md
-          echo "| \`create_byod_roles.sql\` | Creates external-facing roles for BYOD (Bring Your Own Data) scenarios, enabling controlled access to user-owned datasets. |" >> top.md
-          echo "| \`create_database_roles.sql\` | Establishes foundational database roles across environments, serving as the base layer for all access control logic. |" >> top.md
-          echo "| \`create_raw_roles.sql\` | Grants read-only access to raw data schemas, typically used for ingestion validation and audit purposes. |" >> top.md
-          echo "| \`create_sensitive_roles.sql\` | Defines roles with access to sensitive datasets, ensuring proper segregation and compliance. |" >> top.md
-          echo "| \`create_sensitive_roles_with_masking_policies.sql\` | Enhances sensitive role definitions by applying masking policies for fields requiring obfuscation. |" >> top.md
-          echo "| \`grant_core_roles.sql\` | Applies grants to core roles that span multiple domains, such as analytics, engineering, or operations. |" >> top.md
-          echo "| \`grant_functional_roles.sql\` | Assigns permissions to business-specific functional roles, aligning access with operational responsibilities. |" >> top.md
-          echo "| \`run_grants.sql\` | Orchestrates the execution of all grant macros, ensuring consistent and complete role-based access deployment. |" >> top.md
-          echo "" >> top.md
+          repo = os.environ["REPO"]
+          pr_num = os.environ["PR_NUMBER"]
+          pr_title = os.environ["PR_TITLE"]
+          pr_author = os.environ["PR_AUTHOR"]
+          today = datetime.datetime.utcnow().strftime("%Y-%m-%d")
 
-          # Combine top section with updated README
-          cat top.md README.md > final.md
-          mv final.md README.md
+          readme_path = pathlib.Path("README.md")
+
+          # --- Collect macros (excluding utils) ---
+          macro_files = []
+          for root, dirs, files in os.walk("macros"):
+              if "utils" in root.lower():
+                  continue
+              for f in files:
+                  if f.lower().endswith((".sql", ".sql.jinja", ".jinja", ".py", ".macro", ".yml", ".yaml")):
+                      fpath = pathlib.Path(root) / f
+                      try:
+                          text = fpath.read_text(encoding="utf-8", errors="ignore")
+                      except:
+                          continue
+                      # extract description (first comment or first line)
+                      desc = ""
+                      m = re.search(r'/\*([\s\S]{0,300}?)\*/', text)
+                      if m:
+                          desc = m.group(1).strip()
+                      else:
+                          for line in text.splitlines():
+                              if line.strip().startswith(("--", "#")):
+                                  desc = line.strip("-# ").strip()
+                                  break
+                      if not desc:
+                          desc = text.splitlines()[0].strip() if text.splitlines() else "No description"
+                      desc = desc.replace("|","\\|").replace("\n"," ")
+                      macro_files.append((f, desc))
+
+          # --- Build README content ---
+          lines = []
+          lines.append("# Access Control DBT Project")
+          lines.append("")
+          lines.append("This repository contains a dbt project focused on **Access Control**. It provides reusable macros and models to manage, validate, and enforce access control logic within your data platform.")
+          lines.append("")
+          lines.append("## Macros")
+          lines.append("The following macros are available in the `macros` folder (excluding any in `utils`):")
+          lines.append("")
+          lines.append("| Macro | Description |")
+          lines.append("|-------|-------------|")
+          for name, desc in sorted(macro_files):
+              if len(desc) > 300:
+                  desc = desc[:297] + "..."
+              lines.append(f"| `{name}` | {desc} |")
+          lines.append("")
+          lines.append("## Latest Build & Changes")
+          lines.append(f"- 📅 Last updated: **{today}**")
+          lines.append(f"- 📝 Latest merged PR: **{pr_title}** (PR [#{pr_num}](https://github.com/{repo}/pull/{pr_num})) by @{pr_author}")
+          lines.append("- ✅ CI/CD ensures PRs are validated before merging (branch name, title, justification, labels, assignees, reviewers).")
+          lines.append("- 📖 `CHANGELOG.md` is auto-updated whenever a PR is merged, keeping track of changes per day.")
+          lines.append("- 🛠️ dbt macros here are designed to be reusable and efficient, reducing boilerplate in your models.")
+          lines.append("")
+          lines.append("## How to Use")
+          lines.append("1. Review macros above to understand available functionality.")
+          lines.append("2. Import macros in your dbt models using `{{ macro_name() }}` syntax.")
+          lines.append("3. Check the `CHANGELOG.md` file for the latest merged PRs and updates.")
+          lines.append("")
+
+          new_content = "\n".join(lines)
+
+          # Write README.md if content changed
+          if not readme_path.exists() or readme_path.read_text(encoding="utf-8") != new_content:
+              readme_path.write_text(new_content, encoding="utf-8")
+              print("README.md updated")
+          else:
+              print("README.md already up to date")
+          PY
 
       - name: Commit and push changes
         run: |
-          git config user.name "github-actions"
-          git config user.email "github-actions@github.com"
-          git add README.md
-          git commit -m "📘 Update README with merged PR #${{ github.event.pull_request.number }}"
-          git push
+          git add README.md || true
+          if git diff --cached --quiet; then
+            echo "No README changes to commit"
+          else
+            git commit -m "docs: update README with latest macros and PR info (#${{ github.event.pull_request.number }})"
+            git push origin HEAD
+          fi
