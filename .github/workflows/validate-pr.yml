@@ -1,0 +1,73 @@
+name: Validate Pull Request Standards
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+jobs:
+  validate-pr:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Validate PR metadata
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+
+            // 1. Validate PR title
+            if (!pr.title.startsWith('Access Control - ')) {
+              core.setFailed('❌ PR title must start with "Access Control - "');
+            }
+
+            // 2. Validate branch name
+            const branchName = pr.head.ref;
+            const validBranchRegex = /^[a-z0-9/_]+$/;
+            if (!branchName.startsWith('fix/') && !branchName.startsWith('access/')) {
+              core.setFailed('❌ Branch name must start with "fix/" or "access/"');
+            } else if (!validBranchRegex.test(branchName)) {
+              core.setFailed('❌ Branch name must contain only lowercase letters, numbers, "/" or "_"');
+            }
+
+            // 3. Validate label
+            const hasLabel = pr.labels.some(label => label.name.toLowerCase() === 'access control');
+            if (!hasLabel) {
+              core.setFailed('❌ PR must have the "access control" label');
+            }
+
+            // 4. Validate assignees
+            if (pr.assignees.length === 0) {
+              core.setFailed('❌ PR must have at least one assignee');
+            }
+
+            // 5. Validate comment format
+            const comments = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: pr.number
+            });
+
+            const hasValidComment = comments.data.some(comment => {
+              return (
+                comment.body.includes('### ServiceNow: [') &&
+                comment.body.includes('](http') &&
+                comment.body.includes('### Justification:')
+              );
+            });
+
+            if (!hasValidComment) {
+              core.setFailed('❌ PR must include a comment with "### ServiceNow: [link]" and "### Justification:" headings');
+            }
+
+      - name: Check for merge conflicts
+        run: |
+          git fetch origin ${{ github.event.pull_request.base.ref }}
+          git checkout ${{ github.event.pull_request.head.ref }}
+          git merge --no-commit --no-ff origin/${{ github.event.pull_request.base.ref }} || echo "conflict" > conflict.txt
+
+      - name: Fail if conflicts exist
+        run: |
+          if [ -f conflict.txt ]; then
+            echo "❌ Merge conflicts detected. Please resolve before proceeding."
+            exit 1
+          fi
