@@ -13,48 +13,73 @@ jobs:
         with:
           script: |
             const pr = context.payload.pull_request;
-
             const errors = [];
 
             // 1. Branch name validation
             const branch = pr.head.ref;
             if (!/^(fix|access)\/[a-z0-9/_-]+$/.test(branch)) {
-              errors.push(`❌ Branch name "${branch}" must start with fix/ or access/ and contain only lowercase letters, numbers, /, or _`);
+              errors.push(`❌ Branch name \`${branch}\` must start with \`fix/\` or \`access/\` and contain only lowercase letters, numbers, /, or _`);
             }
 
             // 2. Title check
             if (!pr.title.startsWith("Access Control - ")) {
-              errors.push(`❌ PR title must start with "Access Control - "`);
+              errors.push(`❌ PR title must start with **"Access Control - "**`);
             }
 
-            // 3 & 4. Body (comment) validation
+            // 3. ServiceNow check
             const body = pr.body || "";
             const hasServiceNow = /### ServiceNow:\s*\(\[#\w+\]\(http.*\)\)/.test(body);
-            const hasJustification = /### Justification:/.test(body);
+            if (!hasServiceNow) {
+              errors.push(`❌ PR description must include a ServiceNow reference in format:\n   \`### ServiceNow: ([#RequestNumber](URL))\``);
+            }
 
-            if (!(hasServiceNow || hasJustification)) {
-              errors.push(`❌ PR description must include either:\n- ### ServiceNow: ([#RequestNumber](URL))\n- OR ### Justification:`);
+            // 4. Justification check
+            const hasJustification = /### Justification:/.test(body);
+            if (!hasJustification) {
+              errors.push(`❌ PR description must include a **Justification** section:\n   \`### Justification:\``);
             }
 
             // 5. Labels check
             if (!pr.labels || pr.labels.length === 0) {
-              errors.push(`❌ At least one label must be set`);
+              errors.push(`❌ At least one **label** must be set`);
             }
 
             // 6. Assignees check
             if (!pr.assignees || pr.assignees.length === 0) {
-              errors.push(`❌ At least one assignee must be set`);
+              errors.push(`❌ At least one **assignee** must be set`);
             }
 
             // 7. Reviewer check
             const reviewers = pr.requested_reviewers || [];
             if (reviewers.length === 0) {
-              errors.push(`❌ At least one reviewer must be requested`);
+              errors.push(`❌ At least one **reviewer** must be requested`);
             }
 
-            // Fail if errors
+            // Post result as PR comment
+            const { owner, repo } = context.repo;
+            const issue_number = pr.number;
+
             if (errors.length > 0) {
-              core.setFailed(errors.join("\n"));
+              const body = [
+                "🚨 **PR Validation Failed**",
+                "",
+                ...errors.map(e => `- ${e}`)
+              ].join("\n");
+
+              await github.rest.issues.createComment({
+                owner,
+                repo,
+                issue_number,
+                body
+              });
+
+              core.setFailed("PR validation failed. See comment for details.");
             } else {
-              core.notice("✅ All validations passed!");
+              const body = "✅ All PR validations passed!";
+              await github.rest.issues.createComment({
+                owner,
+                repo,
+                issue_number,
+                body
+              });
             }
