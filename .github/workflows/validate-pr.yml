@@ -71,10 +71,10 @@ jobs:
             });
 
             if (!hasServiceNow) {
-              errors.push('❌ **Comment** must include `### ServiceNow: ([PR number](URL))` on the same line');
+              errors.push('❌ **Comment** must include `### ServiceNow: ([RequestNumber](URL))`');
             }
             if (!hasJustification) {
-              errors.push('❌ **Comment** must include `### Justification:` followed by explanation');
+              errors.push('❌ **Comment** must include `### Justification:` \nExplanation here');
             }
 
             // 6. Post result
