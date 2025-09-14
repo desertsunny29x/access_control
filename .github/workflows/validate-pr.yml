@@ -17,6 +17,7 @@ jobs:
         uses: actions/github-script@v6
         with:
           script: |
+            const core = require('@actions/core');
             const pr = context.payload.pull_request;
             const errors = [];
 
@@ -26,26 +27,29 @@ jobs:
             }
 
             // 2. Branch name check
-            const branchName = pr.head.ref;
+            const branchName = pr.head.ref || '';
             const validBranchRegex = /^[a-z0-9/_]+$/;
-            if (!branchName.startsWith('fix/') && !branchName.startsWith('access/')) {
+            if (!(branchName.startsWith('fix/') || branchName.startsWith('access/'))) {
               errors.push('❌ **Branch name** must start with `fix/` or `access/`');
-            } else if (!validBranchRegex.test(branchName)) {
+            }
+            if (!validBranchRegex.test(branchName)) {
               errors.push('❌ **Branch name** must contain only lowercase letters, numbers, `/`, or `_`');
             }
 
             // 3. Label check
-            const hasLabel = pr.labels.some(label => label.name.toLowerCase() === 'access control');
+            const labels = pr.labels || [];
+            const hasLabel = labels.some(label => (label.name || '').toLowerCase() === 'access control');
             if (!hasLabel) {
               errors.push('❌ **Label** `access control` is missing');
             }
 
             // 4. Assignee check
-            if (pr.assignees.length === 0) {
+            const assignees = pr.assignees || [];
+            if (assignees.length === 0) {
               errors.push('❌ **Assignee** is not set. Please set it once the PR is ready for review.');
             }
 
-            // 5. Comment format check (split into two validations)
+            // 5. Comment format check
             const comments = await github.rest.issues.listComments({
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -56,11 +60,7 @@ jobs:
             let hasJustification = false;
 
             // Match: ### ServiceNow: ([#123](https://...))
-            const serviceNowRegex = /### ServiceNow:\s*\(
-
-\[#\d+\]
-
-\(https?:\/\/[^\s)]+\)\)/;
+            const serviceNowRegex = /### ServiceNow:\s*\(\[#\d+\]\(https?:\/\/[^\s)]+\)\)/;
 
             comments.data.forEach(comment => {
               if (serviceNowRegex.test(comment.body)) {
@@ -105,12 +105,20 @@ jobs:
 
               core.setFailed('Validation failed. See PR comments for details.');
             } else {
+              const successBody = '✅ All validation checks passed. This pull request is compliant and ready for review.';
               if (previousComment) {
                 await github.rest.issues.updateComment({
                   owner: context.repo.owner,
                   repo: context.repo.repo,
                   comment_id: previousComment.id,
-                  body: '✅ All validation checks passed. This pull request is compliant and ready for review.'
+                  body: successBody
+                });
+              } else {
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: pr.number,
+                  body: successBody
                 });
               }
             }
