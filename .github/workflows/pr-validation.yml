@@ -41,10 +41,10 @@ jobs:
               errors.push(`❌ PR title must start with **"Access Control - "**`);
             }
 
-            // 3. Justification check
+            // 3. Justification check (now requires ## Justification:)
             const body = pr.body || "";
-            if (!/### Justification:/.test(body)) {
-              errors.push(`❌ PR description must include a **Justification** section:\n   \`### Justification:\``);
+            if (!/## Justification:/.test(body)) {
+              errors.push(`❌ PR description must include a **Justification** section:\n   \`## Justification:\``);
             }
 
             // 4. Labels check
