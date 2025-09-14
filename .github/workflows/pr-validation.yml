@@ -26,66 +26,79 @@ jobs:
               errors.push(`❌ Branch name \`${branch}\` must start with \`fix/\` or \`access/\` and contain only lowercase letters, numbers, /, or _`);
             }
 
-            // 2. Title check (explicit)
+            // 2. Title check
             if (!/^Access Control - .+/.test(pr.title)) {
               errors.push(`❌ PR title must start with **"Access Control - "**`);
             }
 
-            // 3. ServiceNow check
+            // 3a. ServiceNow check (strict ALPHANUMERIC + URL, no outer parentheses)
             const body = pr.body || "";
-            const serviceNowRegex = /### ServiceNow:\s*\(\[([A-Za-z0-9]+)\]\((https?:\/\/[^\s)]+)\)\)/;
-            const match = body.match(serviceNowRegex);
-            if (!match) {
-              errors.push(`❌ PR description must include a valid ServiceNow reference in this format:\n   \`### ServiceNow: ([ALPHANUMERIC](http[s]://url))\``);
+            const serviceNowRegex = /### ServiceNow:\s*\[([A-Za-z0-9]+)\]\((https?:\/\/[^\s)]+)\)/;
+            if (!serviceNowRegex.test(body)) {
+              errors.push(`❌ PR description must include a valid ServiceNow reference in this format:\n   \`### ServiceNow: [ALPHANUMERIC](http[s]://url)\``);
             }
 
-            // 4. Justification check
-            const hasJustification = /### Justification:/.test(body);
-            if (!hasJustification) {
+            // 3b. Justification check
+            if (!/### Justification:/.test(body)) {
               errors.push(`❌ PR description must include a **Justification** section:\n   \`### Justification:\``);
             }
 
-            // 5. Labels check
+            // 4. Labels check
             if (!pr.labels || pr.labels.length === 0) {
               errors.push(`❌ At least one **label** must be set`);
             }
 
-            // 6. Assignees check
+            // 5. Assignees check
             if (!pr.assignees || pr.assignees.length === 0) {
               errors.push(`❌ At least one **assignee** must be set`);
             }
 
-            // 7. Reviewer check
+            // 6. Reviewer check
             const reviewers = pr.requested_reviewers || [];
             if (reviewers.length === 0) {
               errors.push(`❌ At least one **reviewer** must be requested`);
             }
 
-            // Post result as PR comment
-            const { owner, repo } = context.repo;
-            const issue_number = pr.number;
-
+            // Prepare comment body with a hidden marker so we can find it later
+            let commentBody = "";
             if (errors.length > 0) {
-              const body = [
+              commentBody = [
+                "<!-- pr-validation -->",
                 "🚨 **PR Validation Failed**",
                 "",
                 ...errors.map(e => `- ${e}`)
               ].join("\n");
-
-              await github.rest.issues.createComment({
-                owner,
-                repo,
-                issue_number,
-                body
-              });
-
               core.setFailed("PR validation failed. See comment for details.");
             } else {
-              const body = "✅ All PR validations passed!";
+              commentBody = "<!-- pr-validation -->\n✅ All PR validations passed!";
+            }
+
+            const { owner, repo } = context.repo;
+            const issue_number = pr.number;
+
+            // Get existing comments to find if our validation comment exists
+            const { data: comments } = await github.rest.issues.listComments({
+              owner,
+              repo,
+              issue_number
+            });
+
+            const existing = comments.find(c => c.body && c.body.includes("<!-- pr-validation -->"));
+
+            if (existing) {
+              // Update the existing comment
+              await github.rest.issues.updateComment({
+                owner,
+                repo,
+                comment_id: existing.id,
+                body: commentBody
+              });
+            } else {
+              // Create a new comment
               await github.rest.issues.createComment({
                 owner,
                 repo,
                 issue_number,
-                body
+                body: commentBody
               });
             }
