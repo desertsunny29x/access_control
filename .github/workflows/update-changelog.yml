@@ -30,7 +30,6 @@ jobs:
           PR_TITLE="${{ github.event.pull_request.title }}"
           PR_NUMBER=${{ github.event.pull_request.number }}
           PR_AUTHOR=${{ github.event.pull_request.user.login }}
-          BRANCH=${{ github.event.pull_request.head.ref }}
           DATE=$(date -u +"%Y-%m-%d")
 
           # Initialize file if missing
@@ -39,7 +38,7 @@ jobs:
             echo "" >> CHANGELOG.md
           fi
 
-          NEW_ENTRY="- 🎉 **${PR_TITLE}** (PR [#${PR_NUMBER}](https://github.com/${{ github.repository }}/pull/${PR_NUMBER})) by @${PR_AUTHOR} [branch: \`${BRANCH}\`]"
+          NEW_ENTRY="- 🎉 **${PR_TITLE}** (PR [#${PR_NUMBER}](https://github.com/${{ github.repository }}/pull/${PR_NUMBER})) by @${PR_AUTHOR}"
 
           # Read file into variable
           CONTENT="$(cat CHANGELOG.md)"
