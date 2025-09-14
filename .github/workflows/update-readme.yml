@@ -51,53 +51,49 @@ jobs:
                   continue
               for f in files:
                   if f.lower().endswith((".sql", ".sql.jinja", ".jinja", ".py", ".macro", ".yml", ".yaml")):
-                      fpath = pathlib.Path(root) / f
-                      try:
-                          text = fpath.read_text(encoding="utf-8", errors="ignore")
-                      except:
-                          continue
-                      # extract description (first comment or first line)
-                      desc = ""
-                      m = re.search(r'/\*([\s\S]{0,300}?)\*/', text)
-                      if m:
-                          desc = m.group(1).strip()
+                      f_lower = f.lower()
+                      if "byod" in f_lower:
+                          desc = "Creates roles for BYOD (Bring Your Own Data) access."
+                      elif "database" in f_lower:
+                          desc = "Sets up database-level roles for access control."
+                      elif "raw" in f_lower:
+                          desc = "Defines roles for raw data sources."
+                      elif "sensitive" in f_lower and "masking" in f_lower:
+                          desc = "Manages sensitive data roles with masking policies."
+                      elif "sensitive" in f_lower:
+                          desc = "Manages sensitive data access roles."
+                      elif "masking" in f_lower:
+                          desc = "Applies masking policies for sensitive data."
                       else:
-                          for line in text.splitlines():
-                              if line.strip().startswith(("--", "#")):
-                                  desc = line.strip("-# ").strip()
-                                  break
-                      if not desc:
-                          desc = text.splitlines()[0].strip() if text.splitlines() else "No description"
-                      desc = desc.replace("|","\\|").replace("\n"," ")
+                          desc = "Reusable dbt macro for access control."
+
                       macro_files.append((f, desc))
 
           # --- Build README content ---
           lines = []
           lines.append("# Access Control DBT Project")
           lines.append("")
-          # ✅ Add PR Validation status badge
+          # ✅ Add PR Validation status badge directly under title
           lines.append("[![PR Validation](https://github.com/desertsunny29x/access_control/actions/workflows/pr-validation.yml/badge.svg)](https://github.com/desertsunny29x/access_control/actions/workflows/pr-validation.yml)")
           lines.append("")
           lines.append("This repository contains a dbt project focused on **Access Control**. It provides reusable macros and models to manage, validate, and enforce access control logic within your data platform.")
           lines.append("")
           lines.append("## Macros")
-          lines.append("The following macros are available in the `macros` folder (excluding any in `utils`):")
+          lines.append("Here are the main macros available in the `macros` folder (excluding any in `utils`):")
           lines.append("")
-          lines.append("| Macro | Description |")
-          lines.append("|-------|-------------|")
+          lines.append("| Macro | What it does |")
+          lines.append("|-------|---------------|")
           for name, desc in sorted(macro_files):
-              if len(desc) > 300:
-                  desc = desc[:297] + "..."
               lines.append(f"| `{name}` | {desc} |")
           lines.append("")
           lines.append("## Latest Build & Changes")
           lines.append(f"- 📅 Last updated: **{today}**")
           lines.append(f"- 📝 Latest merged PR: **{pr_title}** (PR [#{pr_num}](https://github.com/{repo}/pull/{pr_num})) by @{pr_author}")
           lines.append("- 📖 `CHANGELOG.md` is auto-updated whenever a PR is merged, keeping track of changes per day.")
-          lines.append("- 🛠️ dbt macros here are designed to be reusable and efficient, reducing boilerplate in your models.")
+          lines.append("- 🛠️ dbt macros are designed to be reusable and efficient, reducing boilerplate in your models.")
           lines.append("")
           lines.append("## How to Use")
-          lines.append("1. Review macros above to understand available functionality.")
+          lines.append("1. Review the macros above to understand available functionality in simple terms.")
           lines.append("2. Import macros in your dbt models using `{{ macro_name() }}` syntax.")
           lines.append("3. Check the `CHANGELOG.md` file for the latest merged PRs and updates.")
           lines.append("")
@@ -117,6 +113,6 @@ jobs:
           if git diff --cached --quiet; then
             echo "No README changes to commit"
           else
-            git commit -m "docs: update README with latest macros and PR info (#${{ github.event.pull_request.number }})"
+            git commit -m "docs: update README with macros and latest PR info (#${{ github.event.pull_request.number }})"
             git push origin HEAD
           fi
