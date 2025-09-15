@@ -20,7 +20,7 @@ Here are the main macros available in the `macros` folder (excluding any in `uti
 
 ## Latest Build & Changes
 - 📅 Last updated: **2025-09-15**
-- 📝 Latest merged PR: **Access Control - Run grants is failing** (PR [#19](https://github.com/desertsunny29x/access_control/pull/19)) by @desertsunny29x
+- 📝 Latest merged PR: **Access Control - Update run_grant** (PR [#23](https://github.com/desertsunny29x/access_control/pull/23)) by @desertsunny29x
 - 📖 `CHANGELOG.md` is auto-updated whenever a PR is merged, keeping track of changes per day.
 - 🛠️ dbt macros are designed to be reusable and efficient, reducing boilerplate in your models.
 
