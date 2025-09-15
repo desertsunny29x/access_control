@@ -19,8 +19,8 @@ Here are the main macros available in the `macros` folder (excluding any in `uti
 | `run_grants.sql` | Reusable dbt macro for access control. |
 
 ## Latest Build & Changes
-- 📅 Last updated: **2025-09-14**
-- 📝 Latest merged PR: **Update run_grants.sql** (PR [#18](https://github.com/desertsunny29x/access_control/pull/18)) by @desertsunny29x
+- 📅 Last updated: **2025-09-15**
+- 📝 Latest merged PR: **Access Control - Run grants is failing** (PR [#19](https://github.com/desertsunny29x/access_control/pull/19)) by @desertsunny29x
 - 📖 `CHANGELOG.md` is auto-updated whenever a PR is merged, keeping track of changes per day.
 - 🛠️ dbt macros are designed to be reusable and efficient, reducing boilerplate in your models.
 
