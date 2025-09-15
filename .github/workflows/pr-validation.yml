@@ -33,7 +33,7 @@ jobs:
             // 1. Branch name validation
             const branch = pr.head.ref;
             if (!/^(fix|access|feature)\/[a-z0-9/_-]+$/.test(branch)) {
-              errors.push(`❌ Branch name \`${branch}\` must start with \`access/\` \`fix/\` or \`feature/\` and contain only lowercase letters, numbers, /, or _`);
+              errors.push(`❌ Branch name \`${branch}\` must start with \`access/\` , \`fix/\` or \`feature/\` and contain only lowercase letters, numbers, /, or _`);
             }
 
             // 2. Title check
